@@ -24,7 +24,8 @@ services:
       - DATABASE_URL=file:./dev.db
   orders-ms:
     depends_on:
-      - orders-db
+      orders-db:
+        condition: service_healthy
     build: ./orders-ms
     volumes:
       - ./orders-ms/src:/usr/src/app/src
@@ -33,6 +34,20 @@ services:
       - PORT=3002
       - NATS_SERVERS=nats://nats-server:4222
       - DATABASE_URL=postgresql://postgres:123456@orders-db:5432/ordersdb?schema=public
+  payment-ms:
+    build: ./payments-ms
+    ports:
+      - ${PAYMENTS_MS_PORT}:3003
+    volumes:
+      - ./payments-ms/src:/usr/src/app/src
+    command: yarn start:dev
+    environment:
+      - PORT=${PAYMENTS_MS_PORT}
+      - NATS_SERVERS=nats://nats-server:4222
+      - STRIPE_SECRET=${STRIPE_SECRET}
+      - STRIPE_SUCCESS_URL=${STRIPE_SUCCESS_URL}
+      - STRIPE_CANCEL_URL=${STRIPE_CANCEL_URL}
+      - STRIPE_ENDPOINT_SECRET=${STRIPE_ENDPOINT_SECRET}
   orders-db:
     container_name: orders_database
     image: postgres:16.2
@@ -41,6 +56,21 @@ services:
       - ./orders-ms/postgres:/var/lib/postgresql/data
     ports:
       - 5432:5432
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'pg_isready',
+          '-U',
+          'postgres',
+          '-d',
+          'ordersdb',
+          '-h',
+          'localhost',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     environment:
       PGDATA: /myData
       POSTGRES_USER: postgres
